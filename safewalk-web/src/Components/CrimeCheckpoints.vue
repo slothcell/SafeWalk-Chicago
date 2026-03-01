@@ -110,7 +110,7 @@ function highlightCheckpoint(checkpoint: CrimeCheckpoint) {
 .crime-checkpoints-panel {
   position: fixed;
   top: 80px;
-  right: 20px;
+  left: 20px;
   width: 320px;
   background: rgba(255, 255, 255, 0.95);
   border-radius: 8px;
@@ -292,8 +292,9 @@ function highlightCheckpoint(checkpoint: CrimeCheckpoint) {
 
 .checkpoint-tooltip {
   position: fixed;
-  bottom: 20px;
-  left: 20px;
+  bottom: auto;
+  top: 100px;
+  left: 360px;
   background: rgba(0, 0, 0, 0.85);
   color: white;
   padding: 12px 16px;
