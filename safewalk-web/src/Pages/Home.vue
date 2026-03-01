@@ -14,8 +14,11 @@
 
     <!-- Weather Widget (Bottom Left) -->
     <div class="weather-widget" v-if="weather">
-      <div class="weather-temp">{{ weather.temp }}°F</div>
-      <div class="weather-condition">{{ weather.condition }}</div>
+      <div class="weather-icon">{{ weather.icon }}</div>
+      <div class="weather-info">
+        <div class="weather-temp">{{ weather.temp }}°F</div>
+        <div class="weather-condition">{{ weather.conditionName }}</div>
+      </div>
     </div>
 
     <!-- Crime Checkpoints Panel -->
@@ -107,7 +110,7 @@ const routes = ref<any[]>([])
 const started = ref(false)
 const arrivalRef = ref<any>(null)
 const crimeCheckpoints = ref<any[]>([])
-const weather = ref<{temp: number, condition: string} | null>(null)
+const weather = ref<{temp: number, condition: string, icon: string, conditionName: string} | null>(null)
 
 const startInput = ref('')
 const endInput = ref('')
@@ -137,29 +140,34 @@ async function fetchWeather(lat: number, lng: number) {
       // Convert Celsius to Fahrenheit: F = (C * 9/5) + 32
       const tempC = data.current.temperature_2m
       const temp = Math.round((tempC * 9/5) + 32)
-      const conditions: {[key: number]: string} = {
-        0: '☀️ Clear',
-        1: '🌤️ Mostly Clear',
-        2: '⛅ Partly Cloudy',
-        3: '☁️ Cloudy',
-        45: '🌫️ Foggy',
-        48: '🌫️ Foggy',
-        51: '🌧️ Drizzle',
-        53: '🌧️ Drizzle',
-        55: '🌧️ Drizzle',
-        61: '🌧️ Rain',
-        63: '🌧️ Rain',
-        65: '🌧️ Heavy Rain',
-        71: '🌨️ Snow',
-        73: '🌨️ Snow',
-        75: '🌨️ Snow',
-        80: '🌦️ Showers',
-        81: '🌦️ Showers',
-        82: '⛈️ Heavy Showers',
-        95: '⛈️ Thunderstorm'
+      const conditions: {[key: number]: {icon: string, name: string}} = {
+        0: {icon: '☀️', name: 'Clear'},
+        1: {icon: '🌤️', name: 'Mostly Clear'},
+        2: {icon: '⛅', name: 'Partly Cloudy'},
+        3: {icon: '☁️', name: 'Cloudy'},
+        45: {icon: '🌫️', name: 'Foggy'},
+        48: {icon: '🌫️', name: 'Foggy'},
+        51: {icon: '🌧️', name: 'Drizzle'},
+        53: {icon: '🌧️', name: 'Drizzle'},
+        55: {icon: '🌧️', name: 'Drizzle'},
+        61: {icon: '🌧️', name: 'Rain'},
+        63: {icon: '🌧️', name: 'Rain'},
+        65: {icon: '🌧️', name: 'Heavy Rain'},
+        71: {icon: '🌨️', name: 'Snow'},
+        73: {icon: '🌨️', name: 'Snow'},
+        75: {icon: '🌨️', name: 'Snow'},
+        80: {icon: '🌦️', name: 'Showers'},
+        81: {icon: '🌦️', name: 'Showers'},
+        82: {icon: '⛈️', name: 'Heavy Showers'},
+        95: {icon: '⛈️', name: 'Thunderstorm'}
       }
-      const condition = conditions[data.current.weather_code] || '🌡️ Mixed'
-      weather.value = { temp, condition }
+      const conditionData = conditions[data.current.weather_code] || {icon: '🌡️', name: 'Mixed'}
+      weather.value = { 
+        temp, 
+        condition: `${conditionData.icon} ${conditionData.name}`,
+        icon: conditionData.icon,
+        conditionName: conditionData.name
+      }
       console.log('[Weather] Updated weather:', weather.value)
     }
   } catch (err) {
@@ -174,6 +182,9 @@ onMounted(() => {
       (pos) => {
         const { latitude, longitude } = pos.coords
         userLocation.value = [longitude, latitude]
+
+        // fetch weather whenever we successfully obtain a location
+        fetchWeather(latitude, longitude)
         
         // Check if user has arrived at destination during navigation
         if (navigationMode.value && endLocation.value) {
@@ -461,6 +472,9 @@ function startNavigation(routeIndex: number) {
         const { latitude, longitude } = pos.coords
         userLocation.value = [longitude, latitude]
 
+        // update weather occasionally based on new position
+        fetchWeather(latitude, longitude)
+
         // keep the map centered on the user while navigating
         if (navigationMode.value && mapRef.value && mapRef.value.panTo) {
           mapRef.value.panTo(userLocation.value)
@@ -498,6 +512,10 @@ function endNavigation() {
   navigationSteps.value = []
   currentStepIndex.value = 0
   showArrivalOverlay.value = true
+  // clear previous search results so UI resets for next trip
+  routes.value = []
+  started.value = false
+  endLocation.value = null
 
   // Announce arrival with voice
   try {
@@ -730,22 +748,36 @@ function endNavigation() {
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 1000;
-  text-align: center;
-  min-width: 100px;
+  min-width: 130px;
   backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.weather-icon {
+  font-size: 40px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.weather-info {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
 }
 
 .weather-temp {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 700;
   color: #333;
   line-height: 1;
 }
 
 .weather-condition {
-  font-size: 13px;
+  font-size: 12px;
   color: #666;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 /* "I Don't Feel Safe" Button */

@@ -1,35 +1,87 @@
-# SafeWalk-Chicago
+# SafeWalk Loop (Chicago MVP)
 
-This repository contains a Vue 3 frontend (`safewalk-web`) and a minimal FastAPI backend (`backend`) for a safety‑aware routing application focused on Chicago.
+SafeWalk Loop is a lightweight web‑app prototype built for people living in the heart of Chicago. Its **core purpose** is to help users navigate along the *safest possible walking routes* to their destination by taking recent crime data into account and alerting them if anything dangerous appears nearby.
 
-## Backend setup
+---
 
+## 🚧 What this MVP uses
+
+- **Frontend:** Vue 3 (TypeScript) with Vite
+- **Styling/UI:** PrimeVue components and custom CSS
+- **Mapping:** Google Maps (via browser API) for display, geocoding, and routing
+- **Weather:** Open‑Meteo API for a simple onsite weather widget
+- **Backend:** minimal FastAPI service used for SOS alerts
+
+---
+
+## 🧭 Safety criteria & route coloring
+
+- **Safe (green):** no known danger within a one‑mile radius of the route
+- **Moderate (yellow):** danger exists nearby but not within a half‑mile radius
+- **Avoid (red):** at least one dangerous checkpoint lies within a half‑mile of the path
+
+Whenever a hazard is detected along a route, the user is notified and the route badge changes accordingly.
+
+---
+
+## 🚀 User experience flow
+
+1. On first load the app asks the user for location permission and uses it as the origin.
+2. A search bar at the top asks you your location and the destination.
+3. After entering a destination in Chicago, the app calculates multiple walking routes, scores them by safety, and displays them in a side panel.
+4. The user picks one of the suggested routes.
+5. Checkpoints marked as dangerous are automatically updated on the map and shown to the user as they move.
+6. During navigation, the map keeps the user‑location arrow recentred.
+7. Upon arrival, the screen fades and a message **“you have arrived!”** appears for five seconds before disappearing.
+
+---
+
+## 🧑‍💻 Profile & emergency features
+
+Users are prompted to enter basic profile information:
+- Name, phone number, address, email
+- Blood group, birthday
+
+Within the profile they may manage a list of emergency contacts. When the **"I feel unsafe"** button in the bottom tab is pressed, the user’s current location is sent to those contacts. An SOS button in the top‑right corner immediately contacts 911 (simulated by the backend alert endpoint).
+
+
+### 🗂 Additional app features
+
+- The current route is always visible on the map with live updates.
+- Bottom tab can be dragged up to reveal the unsafe‑button and other controls.
+- History of previously travelled routes, ability to star/favorite destinations (MVP placeholder – not yet implemented).
+
+---
+
+## 📁 Running the project
+
+### Backend
 ```bash
 cd backend
-python -m venv venv          # create virtual environment
-# activate venv: Windows Powershell: .\venv\Scripts\Activate.ps1
+python -m venv venv
+# activate (Windows: .\venv\Scripts\Activate.ps1)
 pip install -r requirements.txt
-uvicorn main:app --reload      # starts backend on port 8000
+uvicorn main:app --reload
 ```
 
-The backend exposes a single endpoint `POST /api/alert` which logs incoming SOS alerts (latitude, longitude, timestamp).
+The backend listens on port 8000 and exposes a single `/api/alert` endpoint for logging SOS alerts.
 
-## Frontend setup
-
+### Frontend
 ```bash
 cd safewalk-web
 npm install
-# create .env.local containing your Google Maps API key:
-# VITE_GOOGLE_MAPS_KEY=your_real_google_maps_api_key_here
+# create .env.local with your Google Maps API key:
+# VITE_GOOGLE_MAPS_KEY=...
 npm run dev
 ```
 
-The Vue app will be served on `http://localhost:5173` (or as printed by Vite). When opened you will see a prompt asking "Where do you want to go?". Enter a destination in Chicago and press Enter. The map will display Chicago with ranked walking routes colored by safety (based on recent crime data).
+App runs at `http://localhost:5173` by default.
 
-Click the "Show" button to highlight a route, and when you reach your destination click "I've arrived" to display the arrival overlay. Press the red SOS button anytime to send your current location to the backend and optionally call 911.
+---
 
-### Notes
-- Google Maps API key is required for geocoding and map display.
-- Routes are pre‑filtered for Chicago coordinates (centered on [-87.6298, 41.8781]).
-- The application uses PrimeVue and Ionicons for UI components.
+## 💡 Purpose & outlook
+
+This repository represents an MVP: a proof‑of‑concept showing how location, crime data, and mapping can be combined to help Chicago residents make safer route choices. The goal is to iterate toward a full‑featured mobile/web service with user profiles, real‑time hazard updates, emergency contact integration, and persistent route history.
+
+Feel free to fork, experiment, and contribute!
 
