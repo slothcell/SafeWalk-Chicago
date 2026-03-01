@@ -1,7 +1,6 @@
-// useSafetyRouting.ts
 import mapboxgl from 'mapbox-gl'
 
-const MAPBOX_TOKEN = 'pk.eyJ1Ijoic2xvdGhjZWxsIiwiYSI6ImNtbTcwZnRnMzBtZmwycG9mbGt3eGtxdnAifQ.OTt5SjOjKmCOc-YPfpOxEQ'
+const MAPBOX_TOKEN = 'YOUR_TOKEN'
 mapboxgl.accessToken = MAPBOX_TOKEN
 
 type RouteScore = {
