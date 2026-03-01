@@ -32,4 +32,4 @@ export const SafeWalkPreset = definePreset(Material, {
       }
     }
   }
-})
+} as any)

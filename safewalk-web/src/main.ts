@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 import PrimeVue from 'primevue/config'
 import App from './App.vue'
-import { SafeWalkPreset } from './theme/SafeWalkPreset'
+import { SafeWalkPreset } from './Theme/SafeWalkPreset'
 
 const app = createApp(App)
 
