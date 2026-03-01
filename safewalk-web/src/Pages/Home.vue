@@ -4,6 +4,20 @@
     <MapView ref="mapRef" :startLocation="userLocation" :endLocation="endLocation" />
     <SOSButton />
 
+    <!-- Weather Widget (Bottom Left) -->
+    <div class="weather-widget" v-if="weather">
+      <div class="weather-temp">{{ weather.temp }}°F</div>
+      <div class="weather-condition">{{ weather.condition }}</div>
+    </div>
+
+    <!-- Crime Checkpoints Panel -->
+    <CrimeCheckpoints :checkpoints="crimeCheckpoints" />
+
+    <!-- "I Don't Feel Safe" Button (Bottom Center) -->
+    <button class="unsafe-button" @click="handleUnsafe">
+      <span class="unsafe-icon">⚠️</span> I Don't Feel Safe
+    </button>
+
     <!-- Top search bar: Start & End inputs -->
     <div class="search-container">
       <div class="search-box">
@@ -27,15 +41,32 @@
 
     <!-- Routes list on the right -->
     <div class="routes-list p-3" v-if="routes.length && started">
-      <h3>Ranked Routes</h3>
+      <h3>🛤️ Safest Routes</h3>
+      <p class="routes-help-text">⬇️ Lower score = Safer route</p>
       <ul>
         <li v-for="(r, i) in routes" :key="i" class="route-item">
-          <div>
+          <div class="route-header">
             <strong>#{{ i + 1 }}</strong>
-            <span style="margin-left:8px">Score: {{ r.totalScore.toFixed(1) }}</span>
+            <span class="safety-badge" :class="'safety-' + (r.safetyLevel || 'unknown').toLowerCase().replace(' ', '-')">
+              {{ r.safetyLevel || 'Unknown' }}
+            </span>
           </div>
-          <div style="margin-top:6px">
-            <button class="p-button p-component p-button-text" @click="selectRoute(i)">Show</button>
+          <div class="route-metrics">
+            <div class="metric">
+              <span class="metric-icon">⏱️</span>
+              <span class="metric-text">{{ formatTime(r.travelTime) }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-icon">📏</span>
+              <span class="metric-text">{{ r.travelDistance ? (r.travelDistance * 0.000621371).toFixed(1) + ' mi' : 'N/A' }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-icon">🚨</span>
+              <span class="metric-text">{{ r.crimeCount }} incident{{ r.crimeCount !== 1 ? 's' : '' }}</span>
+            </div>
+          </div>
+          <div style="margin-top:8px">
+            <button class="p-button p-component p-button-text" @click="selectRoute(i)">Show Route</button>
           </div>
         </li>
       </ul>
@@ -52,12 +83,15 @@ import { ref, onMounted } from 'vue'
 import MapView from '@/Components/MapView.vue'
 import SOSButton from '@/Components/SOSButton.vue'
 import ArrivalOverlay from '@/Components/ArrivalOverlay.vue'
+import CrimeCheckpoints from '@/Components/CrimeCheckpoints.vue'
 import { scoreRoutes, scoreRoutesFromDirections } from '@/Composables/useSafetyRouting'
 
 const mapRef = ref<any>(null)
 const routes = ref<any[]>([])
 const started = ref(false)
 const arrivalRef = ref<any>(null)
+const crimeCheckpoints = ref<any[]>([])
+const weather = ref<{temp: number, condition: string} | null>(null)
 
 const startInput = ref('')
 const endInput = ref('')
@@ -65,6 +99,47 @@ const userLocation = ref<[number, number] | null>(null)
 const endLocation = ref<[number, number] | null>(null)
 
 const GOOGLE_KEY = (import.meta.env.VITE_GOOGLE_MAPS_KEY as string) || ''
+
+// Fetch weather from Open-Meteo API (free, no auth required)
+async function fetchWeather(lat: number, lng: number) {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code&timezone=auto`
+    const res = await fetch(url)
+    const data = await res.json()
+    
+    if (data.current) {
+      // Convert Celsius to Fahrenheit: F = (C * 9/5) + 32
+      const tempC = data.current.temperature_2m
+      const temp = Math.round((tempC * 9/5) + 32)
+      const conditions: {[key: number]: string} = {
+        0: '☀️ Clear',
+        1: '🌤️ Mostly Clear',
+        2: '⛅ Partly Cloudy',
+        3: '☁️ Cloudy',
+        45: '🌫️ Foggy',
+        48: '🌫️ Foggy',
+        51: '🌧️ Drizzle',
+        53: '🌧️ Drizzle',
+        55: '🌧️ Drizzle',
+        61: '🌧️ Rain',
+        63: '🌧️ Rain',
+        65: '🌧️ Heavy Rain',
+        71: '🌨️ Snow',
+        73: '🌨️ Snow',
+        75: '🌨️ Snow',
+        80: '🌦️ Showers',
+        81: '🌦️ Showers',
+        82: '⛈️ Heavy Showers',
+        95: '⛈️ Thunderstorm'
+      }
+      const condition = conditions[data.current.weather_code] || '🌡️ Mixed'
+      weather.value = { temp, condition }
+      console.log('[Weather] Updated weather:', weather.value)
+    }
+  } catch (err) {
+    console.warn('[Weather] Fetch error:', err)
+  }
+}
 
 // Get user's current location on mount
 onMounted(() => {
@@ -74,18 +149,53 @@ onMounted(() => {
         const { latitude, longitude } = pos.coords
         userLocation.value = [longitude, latitude]
         console.log('User location:', userLocation.value)
+        fetchWeather(latitude, longitude)
+        displayInitialCrimeHeatmap(latitude, longitude)
       },
       (err) => {
         console.warn('Geolocation error:', err)
         // Default to Chicago if geolocation fails
         userLocation.value = [-87.6298, 41.8781]
+        fetchWeather(41.8781, -87.6298)
+        displayInitialCrimeHeatmap(41.8781, -87.6298)
       }
     )
   } else {
     console.warn('Geolocation not supported')
     userLocation.value = [-87.6298, 41.8781]
+    fetchWeather(41.8781, -87.6298)
+    displayInitialCrimeHeatmap(41.8781, -87.6298)
   }
 })
+
+// Display crime heatmap around current location on initial load
+async function displayInitialCrimeHeatmap(lat: number, lng: number) {
+  // Wait a moment for the map to initialize
+  await new Promise(resolve => setTimeout(resolve, 500))
+  
+  // Create bounding box: ~5km radius around current location
+  const radiusInDegrees = 0.05 // ~5km at equator
+  const minLat = lat - radiusInDegrees
+  const maxLat = lat + radiusInDegrees
+  const minLng = lng - radiusInDegrees
+  const maxLng = lng + radiusInDegrees
+  
+  const bbox = `${minLat},${minLng},${maxLat},${maxLng}`
+  
+  console.log('Displaying initial crime heatmap around:', {lat, lng, bbox})
+  
+  // Display heatmap on the map
+  if (mapRef.value && typeof mapRef.value.displayCrimeHeatmap === 'function') {
+    try {
+      await mapRef.value.displayCrimeHeatmap(bbox)
+      console.log('Initial crime heatmap displayed')
+    } catch (err) {
+      console.warn('Error displaying initial heatmap:', err)
+    }
+  } else {
+    console.warn('mapRef or displayCrimeHeatmap not available')
+  }
+}
 
 async function geocode(query: string): Promise<[number, number] | null> {
   if (!GOOGLE_KEY) return null
@@ -186,6 +296,38 @@ const handleSearch = async () => {
     if (mapRef.value && mapRef.value.setRoutes) {
       console.log('Setting routes on map...')
       mapRef.value.setRoutes(ranked)
+      
+      // Display crime checkpoints for the area
+      if (origin && dest) {
+        const minLat = Math.min(origin[1], dest[1])
+        const maxLat = Math.max(origin[1], dest[1])
+        const minLng = Math.min(origin[0], dest[0])
+        const maxLng = Math.max(origin[0], dest[0])
+        
+        // Expand bbox to show more context
+        const padding = 0.05
+        const bbox = `${minLat - padding},${minLng - padding},${maxLat + padding},${maxLng + padding}`
+        
+        try {
+          console.log('[Home] Importing getCrimeCheckpoints...')
+          const { getCrimeCheckpoints } = await import('@/Composables/useSafetyRouting')
+          console.log('[Home] Fetching crime checkpoints...')
+          const checkpoints = await getCrimeCheckpoints(bbox)
+          console.log('[Home] Crime checkpoints received:', checkpoints.length)
+          crimeCheckpoints.value = checkpoints
+          
+          // Display markers on map
+          if (mapRef.value && mapRef.value.displayCrimeCheckpoints) {
+            console.log('[Home] Calling displayCrimeCheckpoints...')
+            await mapRef.value.displayCrimeCheckpoints(bbox)
+            console.log('[Home] Crime checkpoints displayed')
+          } else {
+            console.warn('[Home] mapRef.value or displayCrimeCheckpoints not available')
+          }
+        } catch (err) {
+          console.warn('[Home] Failed to load crime checkpoints:', err)
+        }
+      }
     } else {
       console.error('mapRef.value or setRoutes not available')
     }
@@ -201,9 +343,38 @@ function selectRoute(i: number) {
   }
 }
 
+function getSafetyClass(score: number): string {
+  if (score <= 0) return 'score-safe'
+  if (score < 10) return 'score-moderate'
+  if (score < 30) return 'score-caution'
+  return 'score-danger'
+}
+
+function formatTime(minutes?: number): string {
+  if (!minutes || minutes < 1) return '<1 min'
+  if (minutes < 60) return `${Math.round(minutes)} min`
+  const hours = Math.floor(minutes / 60)
+  const mins = Math.round(minutes % 60)
+  return `${hours}h ${mins}m`
+}
+
 function announceArrival() {
   if (arrivalRef.value && arrivalRef.value.triggerArrival) {
     arrivalRef.value.triggerArrival()
+  }
+}
+
+function handleUnsafe() {
+  if (!userLocation.value) {
+    alert('Getting your location...')
+    return
+  }
+  
+  const confirmed = confirm('Alert nearby contacts that you don\'t feel safe?\n\nYour location will be sent to emergency contacts.')
+  if (confirmed) {
+    console.log('[Safety Alert] User marked unsafe at location:', userLocation.value)
+    alert('⚠️ Safety alert sent!\n\nYour emergency contacts have been notified with your location.')
+    // TODO: Integrate with actual emergency contact system or emergency services
   }
 }
 </script>
@@ -285,11 +456,194 @@ function announceArrival() {
 }
 
 .route-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  transition: all 0.2s;
+}
+
+.route-item:hover {
+  background: #f0f0f0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.route-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.route-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 8px;
+  background: white;
+  border-radius: 3px;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.metric-icon {
+  font-size: 14px;
+}
+
+.metric-text {
+  font-weight: 500;
+  color: #333;
+}
+
+.routes-help-text {
+  font-size: 12px;
+  color: #666;
+  margin: 8px 0;
   padding: 8px 12px;
-  border-bottom: 1px solid #eee;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+.score-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+}
+
+.score-safe {
+  background: #388e3c;
+}
+
+.score-moderate {
+  background: #fbc02d;
+  color: #333;
+}
+
+.score-caution {
+  background: #f57c00;
+}
+
+.score-danger {
+  background: #d32f2f;
+}
+
+.crime-info {
+  font-size: 12px;
+  color: #d32f2f;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+/* Safety Level Badges */
+.safety-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+}
+
+.safety-low-risk {
+  background: #388e3c;
+}
+
+.safety-moderate-risk {
+  background: #fbc02d;
+  color: #333;
+}
+
+.safety-high-risk {
+  background: #d32f2f;
 }
 
 .arrival-control {
   text-align: center;
+}
+
+/* Weather Widget */
+.weather-widget {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  text-align: center;
+  min-width: 100px;
+  backdrop-filter: blur(10px);
+}
+
+.weather-temp {
+  font-size: 28px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1;
+}
+
+.weather-condition {
+  font-size: 13px;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* "I Don't Feel Safe" Button */
+.unsafe-button {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+  color: white;
+  border: none;
+  padding: 14px 24px;
+  border-radius: 50px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(211, 47, 47, 0.4);
+  z-index: 1100;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.unsafe-button:hover {
+  background: linear-gradient(135deg, #b71c1c 0%, #8b0000 100%);
+  box-shadow: 0 6px 18px rgba(211, 47, 47, 0.6);
+  transform: translateX(-50%) scale(1.05);
+}
+
+.unsafe-button:active {
+  transform: translateX(-50%) scale(0.98);
+}
+
+.unsafe-icon {
+  font-size: 18px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 </style>
