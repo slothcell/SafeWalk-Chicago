@@ -70,11 +70,16 @@
           </div>
         </li>
       </ul>
-      <div class="arrival-control p-mt-3">
-        <button class="p-button p-component p-button-primary" @click="announceArrival">I've arrived</button>
+      <div class="arrival-control p-mt-3" v-if="!navigationMode">
+        <button class="p-button p-component p-button-primary" @click="startNavigation(selectedRouteIndex !== null ? selectedRouteIndex : 0)">Start Route</button>
       </div>
     </div>
-    <ArrivalOverlay ref="arrivalRef" />
+    <div v-if="showArrivalOverlay" class="arrival-blur-overlay">
+      <div class="arrival-message">
+        <h2>🎉 You have arrived!</h2>
+        <p>Welcome to your destination.</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -98,7 +103,13 @@ const endInput = ref('')
 const userLocation = ref<[number, number] | null>(null)
 const endLocation = ref<[number, number] | null>(null)
 
+// Navigation state
+const navigationMode = ref(false)
+const selectedRouteIndex = ref<number | null>(null)
+let navigationWatchId: number | null = null
+
 const GOOGLE_KEY = (import.meta.env.VITE_GOOGLE_MAPS_KEY as string) || ''
+const ARRIVAL_RADIUS_METERS = 50 // Trigger arrival when within 50 meters of destination
 
 // Fetch weather from Open-Meteo API (free, no auth required)
 async function fetchWeather(lat: number, lng: number) {
@@ -148,9 +159,17 @@ onMounted(() => {
       (pos) => {
         const { latitude, longitude } = pos.coords
         userLocation.value = [longitude, latitude]
-        console.log('User location:', userLocation.value)
-        fetchWeather(latitude, longitude)
-        displayInitialCrimeHeatmap(latitude, longitude)
+        
+        // Check if user has arrived at destination during navigation
+        if (navigationMode.value && endLocation.value) {
+          const distance = calculateDistance([longitude, latitude], endLocation.value)
+          console.log(`[Navigation] Distance to destination: ${(distance * 1000).toFixed(0)}m`)
+          
+          if (distance * 1000 <= ARRIVAL_RADIUS_METERS) {
+            console.log('[Navigation] User reached destination!')
+            endNavigation()
+          }
+        }
       },
       (err) => {
         console.warn('Geolocation error:', err)
@@ -168,7 +187,6 @@ onMounted(() => {
   }
 })
 
-// Display crime heatmap around current location on initial load
 async function displayInitialCrimeHeatmap(lat: number, lng: number) {
   // Wait a moment for the map to initialize
   await new Promise(resolve => setTimeout(resolve, 500))
@@ -195,6 +213,21 @@ async function displayInitialCrimeHeatmap(lat: number, lng: number) {
   } else {
     console.warn('mapRef or displayCrimeHeatmap not available')
   }
+}
+
+// Calculate distance between two coordinates using Haversine formula (returns km)
+function calculateDistance(coord1: [number, number], coord2: [number, number]): number {
+  const [lon1, lat1] = coord1
+  const [lon2, lat2] = coord2
+  const R = 6371 // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
 }
 
 async function geocode(query: string): Promise<[number, number] | null> {
@@ -376,6 +409,44 @@ function handleUnsafe() {
     alert('⚠️ Safety alert sent!\n\nYour emergency contacts have been notified with your location.')
     // TODO: Integrate with actual emergency contact system or emergency services
   }
+}
+
+function startNavigation(routeIndex: number) {
+  if (!routes.value[routeIndex]) {
+    alert('Invalid route selected')
+    return
+  }
+
+  navigationMode.value = true
+  selectedRouteIndex.value = routeIndex
+
+  if (mapRef.value && mapRef.value.startNavigation) {
+    mapRef.value.startNavigation(routes.value[routeIndex])
+  } else {
+    console.warn('Map navigation not available')
+  }
+}
+
+function endNavigation() {
+  navigationMode.value = false
+  selectedRouteIndex.value = null
+  showArrivalOverlay.value = true
+
+  // Stop geolocation watch
+  if (navigationWatchId !== null) {
+    navigator.geolocation.clearWatch(navigationWatchId)
+    navigationWatchId = null
+  }
+
+  // Reset map navigation
+  if (mapRef.value && mapRef.value.stopNavigation) {
+    mapRef.value.stopNavigation()
+  }
+
+  // Hide arrival overlay after a few seconds
+  setTimeout(() => {
+    showArrivalOverlay.value = false
+  }, 5000)
 }
 </script>
 

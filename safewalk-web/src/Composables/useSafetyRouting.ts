@@ -161,10 +161,20 @@ export async function fetchRecentCrimes(bbox: string, hoursAgo: number = 24*28) 
     const filtered = (Array.isArray(data) ? data : []).filter(c => {
       const lat = typeof c.latitude === 'string' ? parseFloat(c.latitude) : c.latitude
       const lng = typeof c.longitude === 'string' ? parseFloat(c.longitude) : c.longitude
+      
+      // Debug logging to see what's being filtered
+      if (isNaN(lat) || isNaN(lng)) {
+        if (!c.latitude || !c.longitude) {
+          // Silently skip if no coordinates at all
+          return false
+        }
+        console.warn('[Crime API] Crime record filtered due to invalid coordinates:', { latitude: c.latitude, longitude: c.longitude, primaryType: c.primary_type })
+      }
+      
       return !isNaN(lat) && !isNaN(lng)
     })
     
-    console.log(`[Crime API] Valid crimes after filtering: ${filtered.length}`)
+    console.log(`[Crime API] Input: ${(Array.isArray(data) ? data : []).length} records, Output: ${filtered.length} valid crimes`)
     
     // Log sample crimes for debugging
     if (filtered.length > 0) {
@@ -242,14 +252,24 @@ async function tryFetchFromCKAN(bbox: string): Promise<any[]> {
 function generateMockCrimeData(bbox: {minLat: number, minLng: number, maxLat: number, maxLng: number}, hoursAgo: number): any[] {
   console.log('[Crime API] Generating mock data for testing')
   
+  const latRange = bbox.maxLat - bbox.minLat
+  const lngRange = bbox.maxLng - bbox.minLng
+  
+  // Generate more crimes distributed throughout the route bbox
   const mockCrimes = [
-    { primary_type: 'THEFT', latitude: bbox.minLat + (bbox.maxLat - bbox.minLat) * 0.3, longitude: bbox.minLng + (bbox.maxLng - bbox.minLng) * 0.3, date: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() },
-    { primary_type: 'ROBBERY', latitude: bbox.minLat + (bbox.maxLat - bbox.minLat) * 0.6, longitude: bbox.minLng + (bbox.maxLng - bbox.minLng) * 0.5, date: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() },
-    { primary_type: 'ASSAULT', latitude: bbox.minLat + (bbox.maxLat - bbox.minLat) * 0.5, longitude: bbox.minLng + (bbox.maxLng - bbox.minLng) * 0.7, date: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString() },
-    { primary_type: 'CRIMINAL DAMAGE', latitude: bbox.minLat + (bbox.maxLat - bbox.minLat) * 0.4, longitude: bbox.minLng + (bbox.maxLng - bbox.minLng) * 0.4, date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() },
-    { primary_type: 'THEFT', latitude: bbox.minLat + (bbox.maxLat - bbox.minLat) * 0.7, longitude: bbox.minLng + (bbox.maxLng - bbox.minLng) * 0.2, date: new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString() }
+    { primary_type: 'THEFT', latitude: bbox.minLat + latRange * 0.2, longitude: bbox.minLng + lngRange * 0.2, date: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString() },
+    { primary_type: 'ROBBERY', latitude: bbox.minLat + latRange * 0.3, longitude: bbox.minLng + lngRange * 0.3, date: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
+    { primary_type: 'ASSAULT', latitude: bbox.minLat + latRange * 0.4, longitude: bbox.minLng + lngRange * 0.4, date: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() },
+    { primary_type: 'CRIMINAL DAMAGE', latitude: bbox.minLat + latRange * 0.5, longitude: bbox.minLng + lngRange * 0.5, date: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString() },
+    { primary_type: 'THEFT', latitude: bbox.minLat + latRange * 0.6, longitude: bbox.minLng + lngRange * 0.6, date: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString() },
+    { primary_type: 'BURGLARY', latitude: bbox.minLat + latRange * 0.7, longitude: bbox.minLng + lngRange * 0.3, date: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() },
+    { primary_type: 'THEFT', latitude: bbox.minLat + latRange * 0.35, longitude: bbox.minLng + lngRange * 0.7, date: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString() },
+    { primary_type: 'ASSAULT', latitude: bbox.minLat + latRange * 0.65, longitude: bbox.minLng + lngRange * 0.65, date: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString() },
+    { primary_type: 'ROBBERY', latitude: bbox.minLat + latRange * 0.15, longitude: bbox.minLng + lngRange * 0.85, date: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString() },
+    { primary_type: 'CRIMINAL DAMAGE', latitude: bbox.minLat + latRange * 0.8, longitude: bbox.minLng + lngRange * 0.15, date: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString() }
   ]
   
+  console.log(`[Crime API] Generated ${mockCrimes.length} mock crimes in bbox`)
   return mockCrimes
 }
 
@@ -431,10 +451,15 @@ export async function fetchCrimesForRoute(routeCoordinates: Array<{lat: number, 
     const validCrimes = (Array.isArray(crimes) ? crimes : []).filter(c => {
       const lat = typeof c.latitude === 'string' ? parseFloat(c.latitude) : c.latitude
       const lng = typeof c.longitude === 'string' ? parseFloat(c.longitude) : c.longitude
-      return !isNaN(lat) && !isNaN(lng)
+      
+      const isValid = !isNaN(lat) && !isNaN(lng)
+      if (!isValid && (c.latitude || c.longitude)) {
+        console.warn('[Safety Scoring] Invalid crime coordinates:', { latitude: c.latitude, longitude: c.longitude, type: c.primary_type })
+      }
+      return isValid
     })
     
-    console.log(`[Safety Scoring] ✅ Retrieved ${validCrimes.length} crimes from bbox area`)
+    console.log(`[Safety Scoring] Retrieved ${Array.isArray(crimes) ? crimes.length : 0} records, ${validCrimes.length} with valid coordinates`)
     
     // Log sample crimes for debugging
     if (validCrimes.length > 0) {
@@ -454,9 +479,8 @@ export async function fetchCrimesForRoute(routeCoordinates: Array<{lat: number, 
 }
 
 /**
- * Score a route based on crime density in grid cells (matching the red-tinted heatmap)
- * Uses the same 0.01 degree grid cells as the heatmap visualization
- * Routes passing through high-crime density areas receive higher risk scores
+ * Score a route based on incidents within 1 mile radius
+ * Counts actual incidents near the walking route
  */
 export function scoreRoute(
   routeCoordinates: Array<{lat: number, lng: number}>,
@@ -467,12 +491,13 @@ export function scoreRoute(
     return { totalScore: 0, crimeCount: 0, safetyLevel: 'Low Risk' }
   }
 
-  // Step 1: Create a grid of crimes matching the heatmap (0.01 degree cells ~ 1km x 1km)
-  const gridSize = 0.01
-  const crimeGrid = new Map<string, number>() // Map of "gridLat,gridLng" -> crime count
+  const PROXIMITY_RADIUS_KM = 1.609 // 1 mile in kilometers
   
-  // Aggregate crimes into grid cells
-  crimes.forEach(crime => {
+  // Find all crimes within 1 mile radius of the route
+  let nearbyIncidents = 0
+  let proximityScore = 0
+
+  crimes.forEach((crime, idx) => {
     let lat: number, lng: number
     
     // Handle different crime data formats (from API: latitude/longitude fields)
@@ -496,70 +521,55 @@ export function scoreRoute(
       return
     }
 
-    if (isNaN(lat) || isNaN(lng)) return
+    if (isNaN(lat) || isNaN(lng)) {
+      return
+    }
 
-    // Calculate grid cell coordinates
-    const gridLat = Math.floor(lat / gridSize) * gridSize
-    const gridLng = Math.floor(lng / gridSize) * gridSize
-    const gridKey = `${gridLat},${gridLng}`
+    const crimeCoord: [number, number] = [lng, lat]
     
-    crimeGrid.set(gridKey, (crimeGrid.get(gridKey) || 0) + 1)
-  })
-
-  // Step 2: Find max crime density for scoring normalization
-  const maxCrimesInCell = Math.max(...Array.from(crimeGrid.values()), 1)
-  
-  // Step 3: Score the route based on grid cells it passes through
-  let totalScore = 0
-  const routeGridCells = new Set<string>()
-  let crimesCrossed = 0
-
-  // Check each route coordinate and calculate grid cell impact
-  routeCoordinates.forEach(coord => {
-    const gridLat = Math.floor(coord.lat / gridSize) * gridSize
-    const gridLng = Math.floor(coord.lng / gridSize) * gridSize
-    const gridKey = `${gridLat},${gridLng}`
+    // Find minimum distance from this crime to any point on the route
+    let minDistance = Infinity
+    routeCoordinates.forEach(routePoint => {
+      const routePointCoord: [number, number] = [routePoint.lng, routePoint.lat]
+      const distance = haversineDistance(crimeCoord, routePointCoord)
+      minDistance = Math.min(minDistance, distance)
+    })
     
-    // Skip if we already counted this grid cell for this route
-    if (routeGridCells.has(gridKey)) return
-    
-    routeGridCells.add(gridKey)
-    
-    // Get crime count in this grid cell
-    const crimesInCell = crimeGrid.get(gridKey) || 0
-    
-    if (crimesInCell > 0) {
-      crimesCrossed += crimesInCell
+    // If crime is within 1 mile radius, count it
+    if (minDistance <= PROXIMITY_RADIUS_KM) {
+      nearbyIncidents++
       
-      // Score based on crime density in the cell (matching heatmap visualization)
-      // Cells with 3+ crimes = visible red zone on heatmap
-      if (crimesInCell >= 10) {
-        totalScore += 15 // Very high crime density (darkest red)
-      } else if (crimesInCell >= 7) {
-        totalScore += 10 // High crime density (dark red)
-      } else if (crimesInCell >= 5) {
-        totalScore += 7 // Moderate-high crime density (medium red)
-      } else if (crimesInCell >= 3) {
-        totalScore += 4 // Moderate crime density (light red - visible on heatmap)
+      // Weight the score by proximity (closer = higher score)
+      // Crimes very close (< 0.1 km) are weighted heavily
+      if (minDistance <= 0.1) {
+        proximityScore += 5 // Very close
+      } else if (minDistance <= 0.5) {
+        proximityScore += 3 // Close
+      } else if (minDistance <= 1.0) {
+        proximityScore += 2 // Nearby
       } else {
-        totalScore += 1 // Low crime density
+        proximityScore += 1 // Within 1 mile
       }
     }
   })
 
-  // Step 4: Determine safety level based on total score and crime density
+  // Calculate total score based on incident count and proximity
+  // Base score: 2 points per incident
+  let totalScore = nearbyIncidents * 2 + proximityScore
+  
+  // Determine safety level based on incident count
   let safetyLevel: 'Low Risk' | 'Moderate Risk' | 'High Risk' = 'Low Risk'
-  if (totalScore >= 20) {
+  if (nearbyIncidents >= 5) {
     safetyLevel = 'High Risk'
-  } else if (totalScore >= 10) {
+  } else if (nearbyIncidents >= 2) {
     safetyLevel = 'Moderate Risk'
   }
 
-  console.log(`[Safety Scoring] Grid-based route score: ${totalScore.toFixed(1)} (crosses ${routeGridCells.size} grid cells with ${crimesCrossed} total crimes) - ${safetyLevel}`)
+  console.log(`[Safety Scoring] Route proximity analysis: ${nearbyIncidents} incidents within 1 mile radius, Score: ${totalScore.toFixed(1)} - ${safetyLevel}`)
 
   return {
     totalScore,
-    crimeCount: crimesCrossed,
+    crimeCount: nearbyIncidents,
     safetyLevel
   }
 }
