@@ -32,7 +32,7 @@ Whenever a hazard is detected along a route, the user is notified and the route 
 4. The user picks one of the suggested routes.
 5. Checkpoints marked as dangerous are automatically updated on the map and shown to the user as they move.
 6. During navigation, the map keeps the user‑location arrow recentred.
-7. Upon arrival, the screen fades and a message **“you have arrived!”** appears for five seconds before disappearing.
+7. Upon arrival, the screen fades and a message **arrived!** appears for five seconds before disappearing.
 
 ---
 
