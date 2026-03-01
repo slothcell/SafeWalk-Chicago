@@ -1,7 +1,8 @@
-import { definePreset } from '@primevue/themes'
-import Material from '@primeuix/themes/material'
+// Export a simple theme preset object to avoid depending on
+// external theme packages at runtime. This file provides the
+// semantic tokens used across the app UI.
 
-export const SafeWalkPreset = definePreset(Material, {
+export const SafeWalkPreset: any = {
   semantic: {
     colorScheme: {
       light: {
@@ -32,4 +33,6 @@ export const SafeWalkPreset = definePreset(Material, {
       }
     }
   }
-} as any)
+}
+
+export default SafeWalkPreset

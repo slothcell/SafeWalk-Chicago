@@ -19,10 +19,12 @@ onMounted(() => {
 <style scoped>
 .banner {
   position: fixed;
-  bottom: 90px;
-  width: 100%;
+  bottom: 20px;
+  left: 20px;
+  width: auto;
   background: black;
   color: white;
-  padding: 15px;
+  padding: 10px 15px;
+  border-radius: 8px;
 }
 </style>

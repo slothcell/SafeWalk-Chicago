@@ -1,10 +1,12 @@
 <script setup lang="ts"></script>
 
 <template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
+  <div>
+    <router-view />
+  </div>
 </template>
-<style scoped></style>
+
+<style scoped>
+.topnav { background: #f7f7f7; padding: 12px; }
+.topnav a { color: #162A2C; text-decoration: none; font-weight: 600 }
+</style>

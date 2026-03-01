@@ -2,8 +2,8 @@
   <div class="search">
     <InputText
       v-model="destination"
-      placeholder="Where do you wanna go?"
-      class="w-full"
+      placeholder="Where do you want to go?"
+      class="w-full large-input"
       @keyup.enter="emitSearch"
     />
   </div>
@@ -26,10 +26,11 @@ const emitSearch = () => {
 
 <style scoped>
 .search {
-  position: absolute;
-  top: 120px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 60%;
+  width: 80%;
+  max-width: 600px;
+}
+.large-input .p-inputtext {
+  font-size: 1.25rem;
+  padding: 0.75rem;
 }
 </style>
