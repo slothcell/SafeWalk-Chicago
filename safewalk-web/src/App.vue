@@ -7,5 +7,4 @@
     documentation
   </p>
 </template>
-
 <style scoped></style>
