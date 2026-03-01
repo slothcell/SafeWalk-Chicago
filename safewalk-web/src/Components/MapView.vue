@@ -74,6 +74,9 @@ function getSafetyLevel(score: number): SafetyLevel {
 
 let routesState: any[] = []
 
+// navigation helper objects
+let navigationPolyline: google.maps.Polyline | null = null
+
 function clearLines() {
   polylines.forEach(p => p.setMap(null))
   polylines.length = 0
@@ -400,6 +403,44 @@ function highlightRoute(selectedIndex: number) {
   }
 }
 
+/**
+ * Called when the user requests to begin navigation along a specific route.
+ * The map will clear existing lines and draw the chosen path, then pan to
+ * the starting coordinate if available.
+ */
+function startNavigation(routeScore: any) {
+  if (!map) {
+    console.warn('[MapView] startNavigation called before map initialized')
+    return
+  }
+  console.log('[MapView] startNavigation received route', routeScore)
+  clearLines()
+  drawRoute(routeScore)
+
+  // create a dedicated polyline in case we want to style it differently later
+  if (navigationPolyline) {
+    navigationPolyline.setMap(null)
+    navigationPolyline = null
+  }
+
+  // pan to the beginning of the route
+  if (routeScore.routeData && routeScore.routeData.coords && routeScore.routeData.coords.length) {
+    const first: [number, number] = routeScore.routeData.coords[0]
+    map.panTo({ lat: first[1], lng: first[0] })
+  }
+}
+
+function stopNavigation() {
+  console.log('[MapView] stopNavigation invoked')
+  // just clear any drawn lines so the map returns to a clean state
+  clearLines()
+}
+
+function panTo(coords: [number, number]) {
+  if (!map || !coords) return
+  map.panTo({ lat: coords[1], lng: coords[0] })
+}
+
 // Watch for location changes and update markers
 watch([() => props.startLocation, () => props.endLocation], () => {
   updateMarkers()
@@ -439,7 +480,7 @@ async function getDirections(origin: [number, number], dest: [number, number]): 
   })
 }
 
-defineExpose({ setRoutes, highlightRoute, getDirections, displayCrimeCheckpoints, clearCrimeMarkers, displayCrimeHeatmap })
+defineExpose({ setRoutes, highlightRoute, getDirections, displayCrimeCheckpoints, clearCrimeMarkers, displayCrimeHeatmap, startNavigation, stopNavigation, panTo })
 
 onMounted(async () => {
   if (!mapContainer.value) return

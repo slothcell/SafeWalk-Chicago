@@ -2,6 +2,14 @@
   <div class="home-container">
     <!-- Map view -->
     <MapView ref="mapRef" :startLocation="userLocation" :endLocation="endLocation" />
+    <!-- Navigation Prompt -->
+    <NavigationPrompt 
+      :currentStep="currentStep"
+      :currentStepIndex="currentStepIndex"
+      :isNavigating="navigationMode"
+      :totalSteps="navigationSteps.length"
+      :steps="navigationSteps"
+    />
     <SOSButton />
 
     <!-- Weather Widget (Bottom Left) -->
@@ -39,8 +47,8 @@
       </div>
     </div>
 
-    <!-- Routes list on the right -->
-    <div class="routes-list p-3" v-if="routes.length && started">
+    <!-- Routes list on the right (hide while navigating) -->
+    <div class="routes-list p-3" v-if="routes.length && started && !navigationMode">
       <h3>🛤️ Safest Routes</h3>
       <p class="routes-help-text">⬇️ Lower score = Safer route</p>
       <ul>
@@ -70,8 +78,9 @@
           </div>
         </li>
       </ul>
-      <div class="arrival-control p-mt-3" v-if="!navigationMode">
-        <button class="p-button p-component p-button-primary" @click="startNavigation(selectedRouteIndex !== null ? selectedRouteIndex : 0)">Start Route</button>
+      <div class="arrival-control p-mt-3">
+        <button v-if="!navigationMode" class="p-button p-component p-button-primary" @click="startNavigation(selectedRouteIndex !== null ? selectedRouteIndex : 0)">Start Route</button>
+        <button v-else class="p-button p-component p-button-secondary" @click="endNavigation()">Cancel Navigation</button>
       </div>
     </div>
     <div v-if="showArrivalOverlay" class="arrival-blur-overlay">
@@ -84,12 +93,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import MapView from '@/Components/MapView.vue'
 import SOSButton from '@/Components/SOSButton.vue'
 import ArrivalOverlay from '@/Components/ArrivalOverlay.vue'
 import CrimeCheckpoints from '@/Components/CrimeCheckpoints.vue'
+import NavigationPrompt from '@/Components/NavigationPrompt.vue'
 import { scoreRoutes, scoreRoutesFromDirections } from '@/Composables/useSafetyRouting'
+import { extractNavigationSteps, findCurrentStepIndex, type NavigationStep } from '@/Composables/useNavigationSteps'
 
 const mapRef = ref<any>(null)
 const routes = ref<any[]>([])
@@ -107,6 +118,10 @@ const endLocation = ref<[number, number] | null>(null)
 const navigationMode = ref(false)
 const selectedRouteIndex = ref<number | null>(null)
 let navigationWatchId: number | null = null
+const navigationSteps = ref<NavigationStep[]>([])
+const currentStepIndex = ref(0)
+const currentStep = computed(() => navigationSteps.value[currentStepIndex.value] || null)
+const showArrivalOverlay = ref(false)
 
 const GOOGLE_KEY = (import.meta.env.VITE_GOOGLE_MAPS_KEY as string) || ''
 const ARRIVAL_RADIUS_METERS = 50 // Trigger arrival when within 50 meters of destination
@@ -417,28 +432,90 @@ function startNavigation(routeIndex: number) {
     return
   }
 
+  const selectedRoute = routes.value[routeIndex]
   navigationMode.value = true
   selectedRouteIndex.value = routeIndex
 
+  // Extract turn-by-turn steps from the route directions
+  if (selectedRoute.routeData && selectedRoute.routeData.directions) {
+    navigationSteps.value = extractNavigationSteps(selectedRoute.routeData.directions)
+    currentStepIndex.value = 0
+    console.log('[Navigation] Extracted', navigationSteps.value.length, 'navigation steps')
+  } else {
+    console.warn('[Navigation] No directions data available in route')
+  }
+
+  // Pan to the start of the route and draw it on the map
   if (mapRef.value && mapRef.value.startNavigation) {
-    mapRef.value.startNavigation(routes.value[routeIndex])
+    console.log('[Home] invoking mapRef.startNavigation')
+    mapRef.value.startNavigation(selectedRoute)
   } else {
     console.warn('Map navigation not available')
+  }
+
+  // kick off a geolocation watch so we can track movement and detect arrival
+  if (navigator.geolocation) {
+    console.log('[Navigation] starting geolocation watch')
+    navigationWatchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords
+        userLocation.value = [longitude, latitude]
+
+        // keep the map centered on the user while navigating
+        if (navigationMode.value && mapRef.value && mapRef.value.panTo) {
+          mapRef.value.panTo(userLocation.value)
+        }
+
+        // Update current step based on user position
+        if (navigationMode.value && navigationSteps.value.length > 0) {
+          const newStepIndex = findCurrentStepIndex(userLocation.value, navigationSteps.value)
+          currentStepIndex.value = newStepIndex
+        }
+
+        // arrival check
+        if (navigationMode.value && endLocation.value) {
+          const distance = calculateDistance([longitude, latitude], endLocation.value)
+          console.log(`[Navigation] Distance to destination: ${(distance * 1000).toFixed(0)}m`)
+          if (distance * 1000 <= ARRIVAL_RADIUS_METERS) {
+            console.log('[Navigation] User reached destination!')
+            endNavigation()
+          }
+        }
+      },
+      (err) => {
+        console.warn('[Navigation] watchPosition error', err)
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+    )
+  } else {
+    console.warn('[Navigation] Geolocation not supported, cannot track progress')
   }
 }
 
 function endNavigation() {
   navigationMode.value = false
   selectedRouteIndex.value = null
+  navigationSteps.value = []
+  currentStepIndex.value = 0
   showArrivalOverlay.value = true
+
+  // Announce arrival with voice
+  try {
+    const utterance = new SpeechSynthesisUtterance('You have arrived at your destination')
+    utterance.rate = 0.95
+    window.speechSynthesis.speak(utterance)
+  } catch (err) {
+    console.warn('[Navigation] Failed to speak arrival announcement:', err)
+  }
 
   // Stop geolocation watch
   if (navigationWatchId !== null) {
+    console.log('[Navigation] clearing geolocation watch')
     navigator.geolocation.clearWatch(navigationWatchId)
     navigationWatchId = null
   }
 
-  // Reset map navigation
+  // Reset map navigation visuals
   if (mapRef.value && mapRef.value.stopNavigation) {
     mapRef.value.stopNavigation()
   }
